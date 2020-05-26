@@ -1,9 +1,8 @@
 ##
-# This module requires Metasploit: http://metasploit.com/download
+# This module requires Metasploit: https://metasploit.com/download
 # Current source: https://github.com/rapid7/metasploit-framework
 ##
 
-require 'msf/core'
 require 'msf/core/handler/bind_tcp'
 require 'msf/core/payload/python'
 require 'msf/core/payload/python/bind_tcp'
@@ -12,7 +11,7 @@ require 'msf/base/sessions/command_shell_options'
 
 module MetasploitModule
 
-  CachedSize = 386
+  CachedSize = 369
 
   include Msf::Payload::Stager
   include Msf::Payload::Python
@@ -30,5 +29,4 @@ module MetasploitModule
       'Stager'      => {'Payload' => ""}
     ))
   end
-
 end

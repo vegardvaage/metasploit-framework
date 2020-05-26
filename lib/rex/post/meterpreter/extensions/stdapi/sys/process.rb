@@ -42,6 +42,8 @@ class Process < Rex::Post::Process
   # valid.
   #
   def Process.[](key)
+    return if key.nil?
+
     each_process { |p|
       if (p['name'].downcase == key.downcase)
         return p['pid']
@@ -138,6 +140,14 @@ class Process < Rex::Post::Process
         flags |= PROCESS_EXECUTE_FLAG_SESSION
         request.add_tlv( TLV_TYPE_PROCESS_SESSION, opts['Session'] )
       end
+      if (opts['Subshell'])
+        flags |= PROCESS_EXECUTE_FLAG_SUBSHELL
+      end
+      if (opts['ParentPid'])
+        request.add_tlv(TLV_TYPE_PARENT_PID, opts['ParentPid']);
+        request.add_tlv(TLV_TYPE_PROCESS_PERMS, PROCESS_ALL_ACCESS)
+        request.add_tlv(TLV_TYPE_INHERIT, false)
+      end
       inmem = opts['InMemory']
       if inmem
 
@@ -171,7 +181,7 @@ class Process < Rex::Post::Process
     # If we were creating a channel out of this
     if (channel_id != nil)
       channel = Rex::Post::Meterpreter::Channels::Pools::StreamPool.new(client,
-          channel_id, "stdapi_process", CHANNEL_FLAG_SYNCHRONOUS)
+          channel_id, "stdapi_process", CHANNEL_FLAG_SYNCHRONOUS, response)
     end
 
     # Return a process instance
@@ -390,35 +400,34 @@ class ProcessList < Array
       return Rex::Text::Table.new(opts)
     end
 
-    cols = [ "PID", "PPID", "Name", "Arch", "Session", "User", "Path" ]
-    # Arch and Session are specific to native Windows, PHP and Java can't do
-    # ppid.  Cut columns from the list if they aren't there.  It is conceivable
-    # that processes might have different columns, but for now assume that the
-    # first one is representative.
-    cols.delete_if { |c| !( first.has_key?(c.downcase) ) or first[c.downcase].nil? }
+    column_headers = [ "PID", "PPID", "Name", "Arch", "Session", "User", "Path" ]
+    column_headers.delete_if do |h|
+      none? { |process| process.has_key?(h.downcase) } ||
+      all? { |process| process[h.downcase].nil? }
+    end
 
     opts = {
       'Header' => 'Process List',
       'Indent' => 1,
-      'Columns' => cols
+      'Columns' => column_headers
     }.merge(opts)
 
     tbl = Rex::Text::Table.new(opts)
-    each { |process|
-      tbl << cols.map { |c|
-        col = c.downcase
+    each do |process|
+      tbl << column_headers.map do |header|
+        col = header.downcase
+        next unless process.keys.any? { |process_header| process_header == col }
         val = process[col]
         if col == 'session'
           val == 0xFFFFFFFF ? '' : val.to_s
         else
           val
         end
-      }.compact
-    }
+      end
+    end
 
     tbl
   end
 end
 
 end; end; end; end; end; end
-

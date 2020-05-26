@@ -1,5 +1,5 @@
 ##
-# This module requires Metasploit: http://metasploit.com/download
+# This module requires Metasploit: https://metasploit.com/download
 # Current source: https://github.com/rapid7/metasploit-framework
 ##
 
@@ -28,12 +28,7 @@ class MetasploitModule < Msf::Post
             'h00die <mike@shorebreaksecurity.com>'
           ],
         'Platform'       => [ 'linux' ],
-        'SessionTypes'   => [ 'meterpreter', 'shell' ],
-        'Targets'        =>
-          [
-            [ 'Automatic', {} ]
-          ],
-        'DefaultTarget'  => 0
+        'SessionTypes'   => [ 'meterpreter', 'shell' ]
       )
     )
 

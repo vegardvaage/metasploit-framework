@@ -1,13 +1,9 @@
 ##
-# This module requires Metasploit: http://metasploit.com/download
+# This module requires Metasploit: https://metasploit.com/download
 # Current source: https://github.com/rapid7/metasploit-framework
 ##
 
-require 'msf/core'
-
-
 class MetasploitModule < Msf::Auxiliary
-
   include Msf::Exploit::Remote::HttpClient
 
   def initialize(info = {})
@@ -35,7 +31,7 @@ class MetasploitModule < Msf::Auxiliary
       'DisclosureDate' => 'Jun 30 2006',
       'Actions'        =>
         [
-          ['Download']
+          ['Download', 'Description' => 'Download arbitrary file']
         ],
       'DefaultAction'  => 'Download'
       ))
@@ -57,7 +53,7 @@ class MetasploitModule < Msf::Auxiliary
             "/unauthenticated"
           ]
         ),
-      ], self.class)
+      ])
   end
 
   def run
@@ -77,5 +73,4 @@ class MetasploitModule < Msf::Auxiliary
       print_status("No response from the server")
     end
   end
-
 end

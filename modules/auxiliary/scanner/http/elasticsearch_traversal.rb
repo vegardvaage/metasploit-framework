@@ -1,9 +1,8 @@
 ##
-# This module requires Metasploit: http://metasploit.com/download
+# This module requires Metasploit: https://metasploit.com/download
 # Current source: https://github.com/rapid7/metasploit-framework
 ##
 
-require 'msf/core'
 require 'json'
 
 class MetasploitModule < Msf::Auxiliary
@@ -40,8 +39,6 @@ class MetasploitModule < Msf::Auxiliary
         OptInt.new('DEPTH', [true, 'Traversal depth', 7])
       ], self.class
     )
-
-    deregister_options('RHOST')
   end
 
   def check_host(ip)
@@ -92,7 +89,7 @@ class MetasploitModule < Msf::Auxiliary
     vprint_status("Checking if it's a vulnerable ElasticSearch")
 
     check_code = check_host(ip)
-    print_status("#{check_code.second}")
+    print_status("#{check_code.message}")
     if check_host(ip) != Exploit::CheckCode::Appears
       return
     end

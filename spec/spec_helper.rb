@@ -1,18 +1,17 @@
 # -*- coding: binary -*-
 require 'stringio'
+require 'factory_bot'
 
 ENV['RAILS_ENV'] = 'test'
 
-unless Bundler.settings.without.include?(:coverage)
-  require 'simplecov'
-end
+require File.expand_path('../../config/rails_bigdecimal_fix', __FILE__)
 
 # @note must be before loading config/environment because railtie needs to be loaded before
 #   `Metasploit::Framework::Application.initialize!` is called.
 #
 # Must be explicit as activerecord is optional dependency
 require 'active_record/railtie'
-
+require 'rubocop/rspec/support'
 require 'metasploit/framework/database'
 # check if database.yml is present
 unless Metasploit::Framework::Database.configurations_pathname.try(:to_path)
@@ -45,7 +44,7 @@ end
 
 RSpec.configure do |config|
   config.raise_errors_for_deprecations!
-
+  config.include RuboCop::RSpec::ExpectOffense
   config.expose_dsl_globally = false
 
   # These two settings work together to allow you to limit a spec run
@@ -112,6 +111,23 @@ RSpec.configure do |config|
   #       # Equivalent to being in spec/controllers
   #     end
   config.infer_spec_type_from_file_location!
+
+  if ENV['REMOTE_DB']
+    require 'metasploit/framework/data_service/remote/managed_remote_data_service'
+    opts = {}
+    opts[:process_name] = File.join('tools', 'dev', 'msfdb_ws')
+    opts[:host] = 'localhost'
+    opts[:port] = '8080'
+
+    config.before(:suite) do
+      Metasploit::Framework::DataService::ManagedRemoteDataService.instance.start(opts)
+    end
+
+    config.after(:suite) do
+      Metasploit::Framework::DataService::ManagedRemoteDataService.instance.stop
+    end
+  end
+
 end
 
 Metasploit::Framework::Spec::Constants::Suite.configure!

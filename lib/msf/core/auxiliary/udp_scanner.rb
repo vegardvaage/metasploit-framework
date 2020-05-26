@@ -43,28 +43,30 @@ module Auxiliary::UDPScanner
     datastore['BATCHSIZE'].to_i
   end
 
-  def udp_sock(ip, port)
-    @udp_socks_mutex.synchronize do
-      key = "#{ip}:#{port}"
-      unless @udp_socks.key?(key)
-        @udp_socks[key] =
-          Rex::Socket::Udp.create({
-            'LocalHost' => datastore['CHOST'] || nil,
-            'LocalPort' => datastore['CPORT'] || 0,
-            'PeerHost'  => ip,
-            'PeerPort'  => port,
-            'Context'   => { 'Msf' => framework, 'MsfExploit' => self }
-          })
-        add_socket(@udp_socks[key])
+  def udp_socket(ip, port, bind_peer: true)
+    key = "#{ip}:#{port}:#{bind_peer ? 'bound' : 'unbound'}"
+    @udp_sockets_mutex.synchronize do
+      unless @udp_sockets.key?(key)
+        sock_info = {
+          'LocalHost' => datastore['CHOST'] || nil,
+          'LocalPort' => datastore['CPORT'] || 0,
+          'Context'   => { 'Msf' => framework, 'MsfExploit' => self }
+        }
+        if bind_peer
+          sock_info['PeerHost'] = ip
+          sock_info['PeerPort'] = port
+        end
+        @udp_sockets[key] = Rex::Socket::Udp.create(sock_info)
+        add_socket(@udp_sockets[key])
       end
-      return @udp_socks[key]
+      return @udp_sockets[key]
     end
   end
 
-  def cleanup_udp_socks
-    @udp_socks_mutex.synchronize do
-      @udp_socks.each do |key, sock|
-        @udp_socks.delete(key)
+  def cleanup_udp_sockets
+    @udp_sockets_mutex.synchronize do
+      @udp_sockets.each do |key, sock|
+        @udp_sockets.delete(key)
         remove_socket(sock)
         sock.close
       end
@@ -73,8 +75,8 @@ module Auxiliary::UDPScanner
 
   # Start scanning a batch of IP addresses
   def run_batch(batch)
-    @udp_socks = {}
-    @udp_socks_mutex = Mutex.new
+    @udp_sockets = {}
+    @udp_sockets_mutex = Mutex.new
 
     @udp_send_count = 0
     @interval_mutex = Mutex.new
@@ -119,11 +121,20 @@ module Auxiliary::UDPScanner
   # Send a packet to a given host and port
   def scanner_send(data, ip, port)
 
+    # flatten any bindata objects
+    data = data.to_binary_s if data.respond_to?('to_binary_s')
+
     resend_count = 0
-    sock = nil
+
     begin
-      sock = udp_sock(ip, port)
-      sock.send(data, 0)
+      addrinfo = Addrinfo.ip(ip)
+      unless addrinfo.ipv4_multicast? || addrinfo.ipv6_multicast?
+        sock = udp_socket(ip, port, bind_peer: true)
+        sock.send(data, 0)
+      else
+        sock = udp_socket(ip, port, bind_peer: false)
+        sock.sendto(data, ip, port, 0)
+      end
 
     rescue ::Errno::ENOBUFS
       resend_count += 1
@@ -133,8 +144,7 @@ module Auxiliary::UDPScanner
       end
 
       scanner_recv(0.1)
-
-      ::IO.select(nil, nil, nil, 0.25)
+      sleep(0.25)
 
       retry
 
@@ -160,7 +170,7 @@ module Auxiliary::UDPScanner
     queue = []
     start = Time.now
     while Time.now - start < timeout do
-      readable, _, _ = ::IO.select(@udp_socks.values, nil, nil, timeout)
+      readable, _, _ = ::IO.select(@udp_sockets.values, nil, nil, timeout)
       if readable
         for sock in readable
           res = sock.recvfrom(65535, timeout)
@@ -186,7 +196,7 @@ module Auxiliary::UDPScanner
       end
     end
 
-    cleanup_udp_socks
+    cleanup_udp_sockets
 
     queue.each do |q|
       scanner_process(*q)

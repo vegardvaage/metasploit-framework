@@ -1,9 +1,8 @@
 ##
-# This module requires Metasploit: http://metasploit.com/download
+# This module requires Metasploit: https://metasploit.com/download
 # Current source: https://github.com/rapid7/metasploit-framework
 ##
 
-require 'msf/core'
 require 'msf/core/handler/reverse_tcp_ssl'
 require 'msf/base/sessions/command_shell'
 require 'msf/base/sessions/command_shell_options'
@@ -19,7 +18,7 @@ module MetasploitModule
     super(merge_info(info,
       'Name'          => 'Command Shell, Reverse TCP SSL (via python)',
       'Description'   => 'Creates an interactive shell via python, uses SSL, encodes with base64 by design.',
-      'Author'        => 'RageLtMan',
+      'Author'        => 'RageLtMan <rageltman[at]sempervictus>',
       'License'       => BSD_LICENSE,
       'Platform'      => 'python',
       'Arch'          => ARCH_PYTHON,

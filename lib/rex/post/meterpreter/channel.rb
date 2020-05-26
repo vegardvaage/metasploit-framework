@@ -45,7 +45,6 @@ CHANNEL_DIO_CLOSE        = 'close'
 #
 ###
 class Channel
-
   # Class modifications to support global channel message
   # dispatching without having to register a per-instance handler
   class << self
@@ -94,7 +93,7 @@ class Channel
   # based on a given type.
   #
   def Channel.create(client, type = nil, klass = nil,
-      flags = CHANNEL_FLAG_SYNCHRONOUS, addends = nil)
+      flags = CHANNEL_FLAG_SYNCHRONOUS, addends = nil, **klass_kwargs)
     request = Packet.create_request('core_channel_open')
 
     # Set the type of channel that we're allocating
@@ -109,23 +108,20 @@ class Channel
 
     request.add_tlv(TLV_TYPE_CHANNEL_CLASS, klass.cls)
     request.add_tlv(TLV_TYPE_FLAGS, flags)
-    request.add_tlvs(addends);
+    request.add_tlvs(addends)
 
     # Transmit the request and wait for the response
     cid = nil
     begin
       response = client.send_request(request)
       cid = response.get_tlv_value(TLV_TYPE_CHANNEL_ID)
-    rescue RequestError
-      # Handle channel open failure exceptions
+      if cid.nil?
+        raise Rex::Post::Meterpreter::RequestError
+      end
     end
 
-    if cid
-      # Create the channel instance
-      klass.new(client, cid, type, flags)
-    else
-      raise Rex::ConnectionRefused
-    end
+    # Create the channel instance
+    klass.new(client, cid, type, flags, response, **klass_kwargs)
   end
 
   ##
@@ -138,11 +134,12 @@ class Channel
   # Initializes the instance's attributes, such as client context,
   # class identifier, type, and flags.
   #
-  def initialize(client, cid, type, flags)
+  def initialize(client, cid, type, flags, packet, **_)
     self.client = client
     self.cid    = cid
     self.type   = type
     self.flags  = flags
+    @mutex  = Mutex.new
 
     # Add this instance to the list
     if (cid and client)
@@ -153,8 +150,12 @@ class Channel
     ObjectSpace.define_finalizer(self, self.class.finalize(client, cid))
   end
 
-  def self.finalize(client,cid)
-    proc { self._close(client,cid) }
+  def self.finalize(client, cid)
+    proc {
+      unless cid.nil?
+        self._close(client, cid)
+      end
+    }
   end
 
   ##
@@ -254,6 +255,13 @@ class Channel
   end
 
   #
+  # Wrapper around check for self.cid
+  #
+  def closed?
+    self.cid.nil?
+  end
+
+  #
   # Wrapper around the low-level close.
   #
   def close(addends = nil)
@@ -297,11 +305,14 @@ class Channel
   end
 
   def _close(addends = nil)
-    unless self.cid.nil?
-      ObjectSpace.undefine_finalizer(self)
-      self.class._close(self.client, self.cid, addends)
-      self.cid = nil
-    end
+    # let the finalizer do the work behind the scenes
+    @mutex.synchronize {
+      unless self.cid.nil?
+        ObjectSpace.undefine_finalizer(self)
+        self.class._close(self.client, self.cid, addends)
+        self.cid = nil
+      end
+    }
   end
   #
   # Enables or disables interactive mode.
@@ -366,16 +377,17 @@ class Channel
   # Stub close handler.
   #
   def dio_close_handler(packet)
-    client.remove_channel(self.cid)
+    @mutex.synchronize {
+      cid = self.cid
+      self.cid = nil
+    }
+    client.remove_channel(cid)
 
     # Trap IOErrors as parts of the channel may have already been closed
     begin
       self.cleanup
     rescue IOError
     end
-
-    # No more channel action, foo.
-    self.cid = nil
 
     return true
   end

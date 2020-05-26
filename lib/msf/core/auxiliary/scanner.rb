@@ -17,12 +17,9 @@ def initialize(info = {})
   super
 
   register_options([
-      OptAddressRange.new('RHOSTS', [ true, "The target address range or CIDR identifier"]),
-      OptInt.new('THREADS', [ true, "The number of concurrent threads", 1 ] )
+      Opt::RHOSTS,
+      OptInt.new('THREADS', [ true, "The number of concurrent threads (max one per host)", 1 ] )
     ], Auxiliary::Scanner)
-
-  # RHOST should not be used in scanner modules, only RHOSTS
-  deregister_options('RHOST')
 
   register_advanced_options([
     OptBool.new('ShowProgress', [true, 'Display progress messages during a scan', true]),
@@ -31,23 +28,12 @@ def initialize(info = {})
 
 end
 
-# If a module is using the scanner mixin, technically the RHOST datastore option should be
-# disabled. Only the mixin should be setting this. See #6989
-
-def setup
-  @original_rhost = datastore['RHOST']
-  datastore['RHOST'] = nil
+def has_check?
+  respond_to?(:check_host)
 end
-
-def cleanup
-  datastore['RHOST'] = @original_rhost
-  super
-end
-
 
 def check
   nmod = replicant
-  nmod.datastore['RHOST'] = @original_rhost
   begin
     nmod.check_host(datastore['RHOST'])
   rescue NoMethodError
@@ -65,7 +51,6 @@ end
 # The command handler when launched from the console
 #
 def run
-
   @show_progress = datastore['ShowProgress']
   @show_percent  = datastore['ShowProgressPercent'].to_i
 
@@ -77,6 +62,9 @@ def run
   threads_max = datastore['THREADS'].to_i
   @tl = []
   @scan_errors = []
+
+  res = Queue.new
+  results = Hash.new
 
   #
   # Sanity check threading given different conditions
@@ -106,13 +94,7 @@ def run
 
   begin
 
-  if (self.respond_to?('run_range'))
-    # No automated progress reporting or error handling for run_range
-    return run_range(datastore['RHOSTS'])
-  end
-
   if (self.respond_to?('run_host'))
-
     loop do
       # Stop scanning if we hit a fatal error
       break if has_fatal_errors?
@@ -132,7 +114,7 @@ def run
           nmod.datastore['RHOST'] = targ
 
           begin
-            nmod.run_host(targ)
+            res << {tip => nmod.run_host(targ)}
           rescue ::Rex::BindFailed
             if datastore['CHOST']
               @scan_errors << "The source IP (CHOST) value of #{datastore['CHOST']} was not usable"
@@ -147,6 +129,11 @@ def run
             nmod.cleanup
           end
         end
+      end
+
+      # Do as much of this work as possible while other threads are running
+      while !res.empty?
+        results.merge! res.pop
       end
 
       # Stop scanning if we hit a fatal error
@@ -172,7 +159,7 @@ def run
     end
 
     scanner_handle_fatal_errors
-    return
+    return results
   end
 
   if (self.respond_to?('run_batch'))
@@ -264,7 +251,7 @@ def run
     return
   end
 
-  print_error("This module defined no run_host, run_range or run_batch methods")
+  print_error("This module defined no run_host or run_batch methods")
 
   rescue ::Interrupt
     print_status("Caught interrupt from the console...")

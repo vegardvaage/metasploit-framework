@@ -5,6 +5,8 @@ module Metasploit
   module Framework
     module LoginScanner
 
+      class BavisionCamerasException < StandardError; end
+
       class BavisionCameras < HTTP
 
         DEFAULT_PORT  = 80
@@ -14,13 +16,13 @@ module Metasploit
 
         # Checks if the target is BAVision Camera's web server. The login module should call this.
         #
-        # @return [Boolean] TrueClass if target is SWG, otherwise FalseClass
+        # @return [String] Error message if target is not a BAVision camera, otherwise FalseClass
         def check_setup
           login_uri = normalize_uri("#{uri}")
           res = send_request({'uri'=> login_uri})
 
-          if res && res.headers['WWW-Authenticate'].match(/realm="IPCamera Login"/)
-            return true
+          unless res && res.headers['WWW-Authenticate'] && res.headers['WWW-Authenticate'].match(/realm="IPCamera Login"/)
+            return "Unable to locate \"realm=IPCamera Login\" in headers. (Is this really a BAVision camera?)"
           end
 
           false
@@ -59,7 +61,13 @@ module Metasploit
           nonce_count = 1
           cnonce = Digest::MD5.hexdigest("%x" % (Time.now.to_i + rand(65535)))
 
-          response['www-authenticate'] =~ /^(\w+) (.*)/
+          i = (response['www-authenticate'] =~ /^(\w+) (.*)/)
+
+          # The www-authenticate header does not return in the format we like,
+          # so let's bail.
+          unless i
+            raise BavisionCamerasException, 'www-authenticate header is not in the right format'
+          end
 
           params = {}
           $2.gsub(/(\w+)="(.*?)"/) { params[$1] = $2 }
@@ -104,7 +112,7 @@ module Metasploit
 
           begin
             result_opts.merge!(try_digest_auth(credential))
-          rescue ::Rex::ConnectionError => e
+          rescue ::Rex::ConnectionError, BavisionCamerasException => e
             # Something went wrong during login. 'e' knows what's up.
             result_opts.merge!(status: LOGIN_STATUS::UNABLE_TO_CONNECT, proof: e.message)
           end
